@@ -33,4 +33,5 @@
 
 *.img
 *.EFI
+*.elf
 ./simple_helloworld/*
