@@ -27,6 +27,7 @@ class Error {
     kUnknownXHCISpeedID,
     kNoWaiter,
     kNoPCIMSI,
+    kUnknownPixelFormat,
     kLastOfCode,  // この列挙子は常に最後に配置する
   };
 
@@ -52,7 +53,8 @@ class Error {
     "kInvalidPhase",
     "kUnknownXHCISpeedID",
     "kNoWaiter",
-    "kNoPCIMSI"
+    "kNoPCIMSI",
+    "kUnknownPixelFormat",
   };
   static_assert(Error::Code::kLastOfCode == code_names_.size());
 
