@@ -10,6 +10,8 @@
 
 #include <numeric>
 #include <vector>
+//#include <deque>
+//#include <limits>
 
 #include "frame_buffer_config.hpp"
 #include "memory_map.hpp"
@@ -34,7 +36,8 @@
 #include "layer.hpp"
 #include "timer.hpp"
 
-#include "my_pictures.cpp"
+//#include "my_pictures.cpp"
+//#include "my_pictures_simple.cpp"
 
 //void* operator new(size_t size, void* buf) {
 //    return buf;
@@ -60,12 +63,6 @@ int printk(const char* format, ...) {
     result = vsprintf(s, format, ap);
     va_end(ap);
 
-    StartLAPICTimer();
-    console->PutString(s);
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
-    sprintf(s, "[%9d]", elapsed);
-
     console->PutString(s);
     return result;
 }
@@ -74,16 +71,38 @@ char memory_manager_buf[sizeof(BitmapMemoryManager)];
 BitmapMemoryManager* memory_manager;
 
 unsigned int mouse_layer_id;
+Vector2D<int> screen_size;
+Vector2D<int> mouse_position;
 
-void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
-    layer_manager->MoveRelative(mouse_layer_id, {displacement_x, displacement_y});
-    StartLAPICTimer();
-    layer_manager->Draw();
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
-    printk("MouseObserver: elapsed = %u\n", elapsed);
+void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y) {
+    static unsigned int mouse_drag_layer_id = 0;
+    static uint8_t previous_buttons = 0;
 
+    const auto oldpos = mouse_position;
+    auto newpos = mouse_position + Vector2D<int>{displacement_x, displacement_y};
+    newpos = ElementMin(newpos, screen_size + Vector2D<int>{-1, -1});
+    mouse_position = ElementMax(newpos, {0,0});
 
+    const auto posdiff = mouse_position - oldpos;
+
+    layer_manager->Move(mouse_layer_id, mouse_position);
+
+    const bool previous_left_pressed = (previous_buttons & 0x01);
+    const bool left_pressed = (buttons & 0x01);
+    if (!previous_left_pressed && left_pressed) {
+        auto layer = layer_manager->FindLayerByPosition(mouse_position, mouse_layer_id);
+        if (layer && layer->IsDraggable()) {
+            mouse_drag_layer_id = layer->ID();
+        }
+    } else if (previous_left_pressed && left_pressed){
+        if (mouse_drag_layer_id > 0){
+            layer_manager->MoveRelative(mouse_drag_layer_id, posdiff);
+        }
+    } else if (previous_left_pressed && !left_pressed) {
+        mouse_drag_layer_id = 0;
+    }
+
+    previous_buttons = buttons;
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_dev) {
@@ -184,12 +203,12 @@ extern "C" void KernelMainNewStack(
         }
         const auto physical_end = desc->physical_start + desc->number_of_pages * kUEFIPageSize;
         if (IsAvailable(static_cast<MemoryType>(desc->type))) {
-            //printk("type = %u, phys = %08lx - %08lx pages = %lu, attr = %08lx\n",
-            //desc->type,
-            //desc->physical_start,
-            //desc->physical_start + desc->number_of_pages * 4096 - 1,
-            //desc->number_of_pages,
-            //desc->attribute);
+            printk("type = %u, phys = %08lx - %08lx pages = %lu, attr = %08lx\n",
+            desc->type,
+            desc->physical_start,
+            desc->physical_start + desc->number_of_pages * 4096 - 1,
+            desc->number_of_pages,
+            desc->attribute);
             available_end = physical_end;
         } else {
             memory_manager->MarkAllocated(
@@ -290,11 +309,11 @@ extern "C" void KernelMainNewStack(
     }
 
     // 背景、マウスなど描画系の処理
-    const int kFrameWidth = frame_buffer_config.horizontal_resolution;
-    const int kFrameHeight = frame_buffer_config.vertical_resolution;
+    screen_size.x = frame_buffer_config.horizontal_resolution;
+    screen_size.y = frame_buffer_config.vertical_resolution;
 
     auto bgwindow = std::make_shared<Window>(
-        kFrameWidth, kFrameHeight, frame_buffer_config.pixel_format);
+        screen_size.x, screen_size.y, frame_buffer_config.pixel_format);
     auto bgwriter = bgwindow->Writer();
 
     // 背景画面更新＆シャドウバッファに書き込み
@@ -306,26 +325,20 @@ extern "C" void KernelMainNewStack(
         kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
     mouse_window->SetTransparentColor(kMouseTransparentColor);
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
+    mouse_position = {200, 200};
     
-    
-    //const std::vector< int > img_ = {2,255,255};
-    //std::vector< std::vector< PixelColor > > img_color = {{{1,255,255}}};
-    //std::vector< std::vector< PixelColor > > img_colors = { 
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //{{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, },
-    //};
-    //printk("      %d %d %d\n", img__[0]);
+    auto main_window = std::make_shared<Window>(
+        160, 52, frame_buffer_config.pixel_format);
+    DrawWindow(*main_window->Writer(), "Hello Wondow");
+
+    auto console_window = std::make_shared<Window>(
+        Console::kColumns * 8, Console::kRows * 16, frame_buffer_config.pixel_format);
+    console->SetWindow(console_window);
     
     // 画像レイヤ
-    std::vector< std::vector< PixelColor >> img_colors = my_pic::getImg();
+    PixelColor dummy_pix = {0, 0, 0};
+    //std::vector< std::vector< PixelColor >> img_colors = my_pic::getImg();
+    std::vector< std::vector< PixelColor >> img_colors = {{dummy_pix}};
     const int kImgWidth = img_colors[0].size();
     const int kImgHeight = img_colors.size();
     auto imgwindow = std::make_shared<Window>(
@@ -334,17 +347,18 @@ extern "C" void KernelMainNewStack(
     DrawImage(*imgwriter, img_colors);
     
     // gifレイヤ
-    std::vector< std::vector< std::vector< PixelColor >>> gif_colors = my_pic::getGif();
-    const int kImgs = gif_colors.size();
-    const int kGifWidth = gif_colors[0][0].size();
-    const int kGifHeight = gif_colors[0].size();
-    std::vector<std::shared_ptr<Window>> imgwindows(kImgs);
-    for (int i = 0; i < kImgs; ++i){
-        imgwindows[i] = std::make_shared<Window>(
-            kGifWidth, kGifHeight, frame_buffer_config.pixel_format);
-        imgwriter = imgwindows[i]->Writer();
-        DrawImage(*imgwriter, gif_colors[i]);
-    }
+    //std::vector< std::vector< std::vector< PixelColor >>> gif_colors = my_pic::getGif();
+    //std::vector< std::vector< std::vector< PixelColor >>> gif_colors = {{{dummy_pix}}};
+    //const int kImgs = gif_colors.size();
+    //const int kGifWidth = gif_colors[0][0].size();
+    //const int kGifHeight = gif_colors[0].size();
+    //std::vector<std::shared_ptr<Window>> imgwindows(kImgs);
+    //for (int i = 0; i < kImgs; ++i){
+    //    imgwindows[i] = std::make_shared<Window>(
+    //        kGifWidth, kGifHeight, frame_buffer_config.pixel_format);
+    //    imgwriter = imgwindows[i]->Writer();
+    //    DrawImage(*imgwriter, gif_colors[i]);
+    //}
 
     FrameBuffer screen;
     if (auto err = screen.Initialize(frame_buffer_config)) {
@@ -362,34 +376,59 @@ extern "C" void KernelMainNewStack(
       .SetWindow(mouse_window)
       .Move({200, 200})
       .ID();
+
+    auto main_window_layer_id = layer_manager->NewLayer()
+      .SetWindow(main_window)
+      .SetDraggable(true)
+      .Move({300, 100})
+      .ID();      
+    
+    console->SetLayerID(layer_manager->NewLayer()
+        .SetWindow(console_window)
+        .Move({0, 0})
+        .ID());
     
     auto imglayer_id = layer_manager->NewLayer()
       .SetWindow(imgwindow)
       .Move({400, 0})
       .ID();
 
-    std::vector<unsigned int> giflayer_id(kImgs);
-    for(int i = 0;  i < kImgs; ++i) {
-        giflayer_id[i] = layer_manager->NewLayer()
-            .SetWindow(imgwindows[i])
-            .Move({350, 200})
-            .ID();
-    }
+    //std::vector<unsigned int> giflayer_id(kImgs);
+    //for(int i = 0;  i < kImgs; ++i) {
+    //    giflayer_id[i] = layer_manager->NewLayer()
+    //        .SetWindow(imgwindows[i])
+    //        .Move({350, 200})
+    //        .ID();
+    //}
     
     layer_manager->UpDown(bglayer_id, 0);
-    layer_manager->UpDown(imglayer_id, 1);
-    for(int i = 0; i < kImgs; ++i) {
-        layer_manager->UpDown(giflayer_id[kImgs-i], i+2);
-    }
-    layer_manager->UpDown(mouse_layer_id, kImgs+2);
-    layer_manager->Draw();
+    layer_manager->UpDown(console->LayerID(), 1);
+    layer_manager->UpDown(main_window_layer_id, 2);
+    layer_manager->UpDown(imglayer_id, 2);
+    //for(int i = 0; i < kImgs; ++i) {
+    //    layer_manager->UpDown(giflayer_id[kImgs-i], i+3);
+    //}
+    //layer_manager->UpDown(mouse_layer_id, kImgs+3);
+    layer_manager->UpDown(mouse_layer_id, 3);
+    layer_manager->Draw({{0, 0}, screen_size});
     
     
+    char str[128];
+    unsigned int count = 0;
+
     int bg_i = 0;
     while(true) {
+
+        ++count;
+        sprintf(str, "%010u", count);
+        FillRectangle(*main_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
+        WriteString(*main_window->Writer(), {24, 28}, str, {0, 0, 0});
+        layer_manager->Draw(main_window_layer_id);
+
         __asm__("cli");
         if (main_queue.Count() == 0) {
-            __asm__("sti\n\thlt"); //sti命令とhlt命令をアトミックに実行する。
+            //__asm__("sti\n\thlt"); //sti命令とhlt命令をアトミックに実行する。
+            __asm__("sti");
             continue;
         }
 
@@ -410,14 +449,10 @@ extern "C" void KernelMainNewStack(
             Log(kError, "Unknown message type: %d\n", msg.type);
         }
     
-        //if (bg_i % 2 == 0){
-        //    layer_manager->UpDown(bglayer_id, 0);
-        //} else {
-        //    layer_manager->UpDown(imglayer_id, 0);        
-        //} 
-        layer_manager->UpDown(giflayer_id[bg_i], 2);
-        ++bg_i;
-        if(bg_i==kImgs) bg_i = 0;
+        //layer_manager->UpDown(giflayer_id[bg_i], 3);
+        //layer_manager->Draw(giflayer_id[bg_i]);
+        //++bg_i;
+        //if(bg_i==kImgs) bg_i = 0;
     }
 }
 

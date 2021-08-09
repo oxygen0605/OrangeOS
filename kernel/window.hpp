@@ -22,12 +22,10 @@ class Window {
   class WindowWriter : public PixelWriter {
    public:
     WindowWriter(Window& window) : window_{window} {}
-    // #@@range_begin(windowwriter_write)
     /** @brief 指定された位置に指定された色を描く */
     virtual void Write(Vector2D<int> pos, const PixelColor& c) override {
       window_.Write(pos, c);
     }
-    // #@@range_end(windowwriter_write)
     /** @brief Width は関連付けられた Window の横幅をピクセル単位で返す。 */
     virtual int Width() const override { return window_.Width(); }
     /** @brief Height は関連付けられた Window の高さをピクセル単位で返す。 */
@@ -46,9 +44,10 @@ class Window {
   /** @brief 与えられた FrameBuffer にこのウィンドウの表示領域を描画する。
    *
    * @param dst  描画先
-   * @param position  writer の左上を基準とした描画位置
+   * @param pos  dst の左上を基準としたウィンドウの位置
+   * @param area  dst の左上を基準とした描画対象範囲
    */
-  void DrawTo(FrameBuffer& dst, Vector2D<int> position);
+  void DrawTo(FrameBuffer& dst, Vector2D<int> pos, const Rectangle<int>& area);
   /** @brief 透過色を設定する。 */
   void SetTransparentColor(std::optional<PixelColor> c);
   /** @brief このインスタンスに紐付いた WindowWriter を取得する。 */
@@ -63,6 +62,8 @@ class Window {
   int Width() const;
   /** @brief 平面描画領域の高さをピクセル単位で返す。 */
   int Height() const;
+  /** @brief 平面描画領域のサイズをピクセル単位で返す。 */
+  Vector2D<int> Size() const;
 
   /** @brief このウィンドウの平面描画領域内で，矩形領域を移動する。
    *
@@ -72,7 +73,6 @@ class Window {
    */
   void Move(Vector2D<int> dst_pos, const Rectangle<int>& src);
 
-  // #@@range_begin(fields)
  private:
   int width_, height_;
   std::vector<std::vector<PixelColor>> data_{};
@@ -80,5 +80,6 @@ class Window {
   std::optional<PixelColor> transparent_color_{std::nullopt};
 
   FrameBuffer shadow_buffer_{};
-  // #@@range_end(fields)
 };
+
+void DrawWindow(PixelWriter& writer, const char* title);

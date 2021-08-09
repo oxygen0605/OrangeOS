@@ -29,6 +29,12 @@ class Layer {
   Layer& SetWindow(const std::shared_ptr<Window>& window);
   /** @brief 設定されたウィンドウを返す。 */
   std::shared_ptr<Window> GetWindow() const;
+  /** @brief レイヤーの原点座標を取得する。 */
+  Vector2D<int> GetPosition() const;
+  /** @brief true でレイヤーがドラッグ移動可能となる。 */
+  Layer& SetDraggable(bool draggable);
+  /** @brief レイヤーがドラッグ移動可能なら true を返す。 */
+  bool IsDraggable() const;
 
   /** @brief レイヤーの位置情報を指定された絶対座標へと更新する。再描画はしない。 */
   Layer& Move(Vector2D<int> pos);
@@ -36,12 +42,15 @@ class Layer {
   Layer& MoveRelative(Vector2D<int> pos_diff);
 
   /** @brief 指定された描画先にウィンドウの内容を描画する。 */
-  void DrawTo(FrameBuffer& screen) const;
+  void DrawTo(FrameBuffer& screen, const Rectangle<int>& area) const;
 
+  // #@@range_begin(fields)
  private:
   unsigned int id_;
-  Vector2D<int> pos_;
-  std::shared_ptr<Window> window_;
+  Vector2D<int> pos_{};
+  std::shared_ptr<Window> window_{};
+  bool draggable_{false};
+  // #@@range_end(fields)
 };
 
 /** @brief LayerManager は複数のレイヤーを管理する。 */
@@ -56,11 +65,13 @@ class LayerManager {
   Layer& NewLayer();
 
   /** @brief 現在表示状態にあるレイヤーを描画する。 */
-  void Draw() const;
+  void Draw(const Rectangle<int>& area) const;
+  /** @brief 指定したレイヤーに設定されているウィンドウの描画領域内を再描画する。 */
+  void Draw(unsigned int id) const;
 
-  /** @brief レイヤーの位置情報を指定された絶対座標へと更新する。再描画はしない。 */
-  void Move(unsigned int id, Vector2D<int> new_position);
-  /** @brief レイヤーの位置情報を指定された相対座標へと更新する。再描画はしない。 */
+  /** @brief レイヤーの位置情報を指定された絶対座標へと更新する。再描画する。 */
+  void Move(unsigned int id, Vector2D<int> new_pos);
+  /** @brief レイヤーの位置情報を指定された相対座標へと更新する。再描画する。 */
   void MoveRelative(unsigned int id, Vector2D<int> pos_diff);
 
   /** @brief レイヤーの高さ方向の位置を指定された位置に移動する。
@@ -73,13 +84,15 @@ class LayerManager {
   /** @brief レイヤーを非表示とする。 */
   void Hide(unsigned int id);
 
-  // #@@range_begin(layermgr_fields)
+  /** @brief 指定された座標にウィンドウを持つ最も上に表示されているレイヤーを探す。 */
+  Layer* FindLayerByPosition(Vector2D<int> pos, unsigned int exclude_id) const;
+
  private:
   FrameBuffer* screen_{nullptr};
+  mutable FrameBuffer back_buffer_{};
   std::vector<std::unique_ptr<Layer>> layers_{};
   std::vector<Layer*> layer_stack_{};
   unsigned int latest_id_{0};
-  // #@@range_end(layermgr_fields)
 
   Layer* FindLayer(unsigned int id);
 };
