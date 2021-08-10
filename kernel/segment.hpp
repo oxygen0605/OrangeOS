@@ -11,7 +11,6 @@
 
 #include "x86_descriptor.hpp"
 
-// #@@range_begin(segment_desc_definition)
 union SegmentDescriptor {
   uint64_t data;
   struct {
@@ -30,7 +29,6 @@ union SegmentDescriptor {
     uint64_t base_high : 8;
   } __attribute__((packed)) bits;
 } __attribute__((packed));
-// #@@range_end(segment_desc_definition)
 
 void SetCodeSegment(SegmentDescriptor& desc,
                     DescriptorType type,
@@ -43,4 +41,9 @@ void SetDataSegment(SegmentDescriptor& desc,
                     uint32_t base,
                     uint32_t limit);
 
+const uint16_t kKernelCS = 1 << 3;
+const uint16_t kKernelSS = 2 << 3;
+const uint16_t kKernelDS = 0;
+
 void SetupSegments();
+void InitializeSegmentation();

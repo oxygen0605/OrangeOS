@@ -27,14 +27,14 @@ struct Vector2D {
   }
 
   template <typename U>
-  Vector2D<T> operator+(const Vector2D<U>& rhs) const {
+  Vector2D<T> operator +(const Vector2D<U>& rhs) const {
     auto tmp = *this;
     tmp += rhs;
     return tmp;
   }
 
   template <typename U>
-  Vector2D<T>& operator -= (const Vector2D<U>& rhs) {
+  Vector2D<T>& operator -=(const Vector2D<U>& rhs) {
     x -= rhs.x;
     y -= rhs.y;
     return *this;
@@ -63,20 +63,19 @@ struct Rectangle {
   Vector2D<T> pos, size;
 };
 
-  template <typename T, typename U>
-  Rectangle<T> operator&(const Rectangle<T>& lhs, const Rectangle<U>& rhs) {
-    const auto lhs_end = lhs.pos + lhs.size;
-    const auto rhs_end = rhs.pos + rhs.size;
-    if (lhs_end.x < rhs.pos.x || lhs_end.y < rhs.pos.y ||
-        rhs_end.x < lhs.pos.x || rhs_end.y < lhs.pos.y) {
-      return {{0, 0}, {0, 0}};
-    }
-
-    auto new_pos = ElementMax(lhs.pos, rhs.pos);
-    auto new_size = ElementMin(lhs_end, rhs_end) - new_pos;
-    return {new_pos, new_size};
+template <typename T, typename U>
+Rectangle<T> operator&(const Rectangle<T>& lhs, const Rectangle<U>& rhs) {
+  const auto lhs_end = lhs.pos + lhs.size;
+  const auto rhs_end = rhs.pos + rhs.size;
+  if (lhs_end.x < rhs.pos.x || lhs_end.y < rhs.pos.y ||
+      rhs_end.x < lhs.pos.x || rhs_end.y < lhs.pos.y) {
+    return {{0, 0}, {0, 0}};
   }
 
+  auto new_pos = ElementMax(lhs.pos, rhs.pos);
+  auto new_size = ElementMin(lhs_end, rhs_end) - new_pos;
+  return {new_pos, new_size};
+}
 
 class PixelWriter {
  public:
@@ -125,9 +124,9 @@ const PixelColor kDesktopBGColor{45, 118, 237};
 const PixelColor kDesktopFGColor{255, 255, 255};
 
 void DrawDesktop(PixelWriter& writer);
-void DrawDesktop2(PixelWriter& writer);
 
-#include <vector>
-#include <array>
-void DrawImage(PixelWriter& writer, std::vector< std::vector< PixelColor > > colors);
-void draw_danbo_mark(int x_first, int y_first, PixelWriter& pixel_writer);
+extern FrameBufferConfig screen_config;
+extern PixelWriter* screen_writer;
+Vector2D<int> ScreenSize();
+
+void InitializeGraphics(const FrameBufferConfig& screen_config);
