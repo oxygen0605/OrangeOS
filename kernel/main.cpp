@@ -144,15 +144,6 @@ void TaskB(uint64_t task_id, int64_t data) {
   }
 }
 
-// #@@range_begin(taskc)
-void TaskIdle(uint64_t task_id, int64_t data) {
-  printk("TaskIdle: task_id=%lu, data=%lx\n", task_id, data);
-  while (true) __asm__("hlt");
-}
-// #@@range_end(taskc)
-
-std::deque<Message>* main_queue;
-
 alignas(16) uint8_t kernel_main_stack[1024 * 1024];
 
 extern "C" void KernelMainNewStack(
@@ -170,37 +161,36 @@ extern "C" void KernelMainNewStack(
   InitializeSegmentation();
   InitializePaging();
   InitializeMemoryManager(memory_map);
-  ::main_queue = new std::deque<Message>(32);
-  InitializeInterrupt(main_queue);
+  InitializeInterrupt();
 
   InitializePCI();
-  usb::xhci::Initialize();
 
   InitializeLayer();
   InitializeMainWindow();
   InitializeTextWindow();
   InitializeTaskBWindow();
-  InitializeMouse();
   layer_manager->Draw({{0, 0}, ScreenSize()});
 
   acpi::Initialize(acpi_table);
-  InitializeLAPICTimer(*main_queue);
-
-  InitializeKeyboard(*main_queue);
+  InitializeLAPICTimer();
 
   const int kTextboxCursorTimer = 1;
   const int kTimer05Sec = static_cast<int>(kTimerFreq * 0.5);
-  __asm__("cli");
   timer_manager->AddTimer(Timer{kTimer05Sec, kTextboxCursorTimer});
-  __asm__("sti");
   bool textbox_cursor_visible = false;
 
-  // #@@range_begin(call_inittask)
+  // #@@range_begin(init_tasks)
   InitializeTask();
-  task_manager->NewTask().InitContext(TaskB, 45);
-  task_manager->NewTask().InitContext(TaskIdle, 0xdeadbeef);
-  task_manager->NewTask().InitContext(TaskIdle, 0xcafebabe);
-  // #@@range_end(call_inittask)
+  Task& main_task = task_manager->CurrentTask();
+  const uint64_t taskb_id = task_manager->NewTask()
+    .InitContext(TaskB, 45)
+    .Wakeup()
+    .ID();
+  // #@@range_end(init_tasks)
+
+  usb::xhci::Initialize();
+  InitializeKeyboard();
+  InitializeMouse();
 
   char str[128];
 
@@ -215,24 +205,24 @@ extern "C" void KernelMainNewStack(
     layer_manager->Draw(main_window_layer_id);
 
     __asm__("cli");
-    if (main_queue->size() == 0) {
-      __asm__("sti\n\thlt");
+    auto msg = main_task.ReceiveMessage();
+    if (!msg) {
+      main_task.Sleep();
+      __asm__("sti");
       continue;
     }
 
-    Message msg = main_queue->front();
-    main_queue->pop_front();
     __asm__("sti");
 
-    switch (msg.type) {
+    switch (msg->type) {
     case Message::kInterruptXHCI:
       usb::xhci::ProcessEvents();
       break;
     case Message::kTimerTimeout:
-      if (msg.arg.timer.value == kTextboxCursorTimer) {
+      if (msg->arg.timer.value == kTextboxCursorTimer) {
         __asm__("cli");
         timer_manager->AddTimer(
-            Timer{msg.arg.timer.timeout + kTimer05Sec, kTextboxCursorTimer});
+            Timer{msg->arg.timer.timeout + kTimer05Sec, kTextboxCursorTimer});
         __asm__("sti");
         textbox_cursor_visible = !textbox_cursor_visible;
         DrawTextCursor(textbox_cursor_visible);
@@ -240,10 +230,15 @@ extern "C" void KernelMainNewStack(
       }
       break;
     case Message::kKeyPush:
-      InputTextWindow(msg.arg.keyboard.ascii);
+      InputTextWindow(msg->arg.keyboard.ascii);
+      if (msg->arg.keyboard.ascii == 's') {
+        printk("sleep TaskB: %s\n", task_manager->Sleep(taskb_id).Name());
+      } else if (msg->arg.keyboard.ascii == 'w') {
+        printk("wakeup TaskB: %s\n", task_manager->Wakeup(taskb_id).Name());
+      }
       break;
     default:
-      Log(kError, "Unknown message type: %d\n", msg.type);
+      Log(kError, "Unknown message type: %d\n", msg->type);
     }
   }
 }
